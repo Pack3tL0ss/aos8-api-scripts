@@ -5,8 +5,7 @@
 
 
 import threading
-import datetime
-import utils
+# import datetime
 import requests
 import argparse
 import socket
@@ -16,22 +15,26 @@ import socket
 # import argparse
 import os
 import time
+from common import utils
+from common import parse
+from common import MyLogger
+from common import AosConnect
 
 path = os.path
 LOCK = threading.Lock()
 COUNT = 3
 controllers = ''
-final_result = []
 port = ''
-localtime = datetime.datetime.now().strftime("%m%d%Y_%H%M%S")
-outfile = 'results.log'
+# localtime = datetime.datetime.now().strftime("%m%d%Y_%H%M%S")
+outfile = 'results.csv'
+outfile2 = 'results.txt'
 log_file = 'image_versions.log'
 yaml_config = 'config.yaml'
 DEBUG = os.environ.get('DEBUG', False)
 
 
 # setting the log level
-log = utils.MyLogger(log_file, debug=DEBUG)
+log = MyLogger(log_file, debug=DEBUG)
 log.info(f" {'-' * 10 } Script Startup {'-' * 20 }")
 
 # -- // Get Config from config.yaml \\ --
@@ -57,6 +60,27 @@ class ManagedDevice:
         self.type = data.get('Type')
         self.version = data.get('Version')
 
+    def __repr__(self):
+        ret = f" ---- {self.name} ----\n"
+        for k, v in self.__dict__.items():
+            if isinstance(v, (str, int)):
+                ret += f" {k}: {v}\n"
+        return ret
+
+    def _repr_csv_(self):
+        """csv representation
+
+        Returns:
+            tuple: commas seperated values of class attributes: (keys, values)
+        """
+        head = ""
+        ret = ""
+        for k, v in self.__dict__.items():
+            if isinstance(v, (str, int)):
+                head += f"{k},"
+                ret += f"{v},"
+        return head.rstrip(','), ret.rstrip(',')
+
 
 class Controllers():
     def __init__(self, conductors):
@@ -76,14 +100,52 @@ class Controllers():
             self.start_controller_threads(md_list)
             self.exec_api(conductor=False)
 
+        with open(outfile, "w") as out:
+            for dev in self.data:
+                out.write(self.data[dev]._repr_csv_()[0] + "\n")
+                break
+            for dev in self.data:
+                out.write(self.data[dev]._repr_csv_()[1] + "\n")
+
+        by_version = {}
+        for dev in self.data:
+            ver0 = self.data[dev].__dict__.get("version 0:0")
+            ver1 = self.data[dev].__dict__.get("version 0:1")
+            if ver0 not in by_version:
+                by_version[ver0] = []
+            if ver1 not in by_version:
+                by_version[ver1] = []
+            _this0 = {'name': self.data[dev].name, 'ip': self.data[dev].ip, 'type': self.data[dev].type}
+            _this1 = {'name': self.data[dev].name, 'ip': self.data[dev].ip, 'type': self.data[dev].type}
+            _this0['default_boot'] = True if '0:0' in self.data[dev].default_boot else False
+            _this1['default_boot'] = True if '0:1' in self.data[dev].default_boot else False
+            _this0['partition'] = '0:0'
+            _this1['partition'] = '0:1'
+            by_version[ver0] += [_this0]
+            by_version[ver1] += [_this1]
+
+        with open(outfile2, "w") as out:
+            rel6 = False
+            for rel in by_version:
+                if rel.startswith('6'):
+                    rel6 = True
+                out.write(f"Partitions Containing {rel}\n")
+                for dev in by_version[rel]:
+                    out.write(f"  {dev['type']}: {dev['name']}({dev['ip']}) Partition: {dev['partition']} "
+                              f"{'' if not dev['default_boot'] else '**default boot**'}\n")
+                out.write('\n')
+            if rel6:
+                out.write(" ** Partitions exist with 6.x **\n")
+            else:
+                out.write(" ** NO partitions exist with 6.x **\n")
+
     def start_controller_threads(self, devices):
-        """Get Session for each
+        """Login/establish session for each controller
         """
         thread_array = []
         t = [None] * len(devices)
 
         for i, dev in enumerate(devices):
-            '''------------Initiating a thread for API session to each controller IP----------------'''
             _this = [dev, config['user'], config['pass']]
             thread_array.append(_this)
             t[i] = threading.Thread(target=self.get_session, args=(_this))
@@ -100,13 +162,13 @@ class Controllers():
     def get_session(self, dev, username, password):
         try:
             ip = socket.gethostbyname(dev)
-            con = utils.AosConnect(ip, user=username, password=password)
+            con = AosConnect(ip, user=username, password=password)
             r = con.api_login()
             if r.ok:
                 if ip not in self.data:
                     self.data[ip] = ManagedDevice(connection=con)
                 else:
-                    setattr(self.data[ip], 'connection',con)
+                    setattr(self.data[ip], 'connection', con)
             else:
                 log.error(r.err)
                 raise r.error.__name__
@@ -134,110 +196,34 @@ class Controllers():
                     con = self.data[dev].connection
                     res = con.execute_command("show switches")
                     if res.ok:
-                        switch_dict = utils.parse_show_switches(res.json)
+                        switch_dict = parse.show_switches(res.json)
                         for ip in switch_dict:
-                            self.data[ip] = ManagedDevice(data=switch_dict[ip])
+                            if switch_dict[ip]['Type'] in ["MD", "master"]:
+                                self.data[ip] = ManagedDevice(data=switch_dict[ip])
+                        # Determine if this is VRRP address for MM
+                        try:
+                            res = con.execute_command("show vrrp")
+                            if res.json.get('_data'):
+                                if dev in '\n'.join(res.json['_data']):
+                                    log.info(f'Removing MM VRRP addrress {dev} from data - data will include physical addresses')
+                                    con.handle.close()
+                                    del self.data[dev]
+                        except Exception as e:
+                            log.error(f"[{dev}] Exception occured 'show vrrp' {e}")
         else:
             for dev in self.data:
                 if hasattr(self.data[dev], "connection"):
                     con = self.data[dev].connection
                     res = con.execute_command("show image version")
                     if res.ok:
-                        img_dict = utils.parse_show_image_version(res.json)
+                        img_dict = parse.show_image_version(res.json)
                         for k, v in img_dict.items():
                             setattr(self.data[dev], k, v)
-
-        print(self.data)
-
-
-            # con.execute_command("show switches")
-            # md_dict = con.ps.parse_show_switches()
-
-            # # md_list = find_up_mds(controller_ids)
-            # ''' execute show configuration committed on all MDs'''
-            # if md_dict:
-            #     print('validating configuration on MDs connected to MM {}\n'.format(ip_address))
-
-            #     for md in md_dict:
-            #         print(md)
-
-                        # tun_conf = con.ps.parse_show_config_tunnel(cntr)
-
-                        # ''' validate for overlapping src/dst IP'''
-                        # result1 = validate_tunnel_ip(tun_conf)
-                        # # final_result.append(result1)
-                        # '''parse the tunnel group configuration from show config'''
-                        # tun_grp = con.ps.parse_tunnel_group(cntr)
-                        # '''validate tunnel grp assigned to the tunnels on the node'''
-                        # result2 = validate_tunnel_grp(tun_conf, tun_grp)
-                        # #  final_result.append(result2)
-                        # ''' write results to the result file'''
-                        # fd = open(outfile, "a")
-                        # fd.write('\noverlapping ip tunnel validation result for node {} connected to MM {},\n'
-                        #          .format(cntr, ip_address))
-                        # fd.write('+++++++++++++++++++++++++++++++++++++++++++++++++\n')
-                        # if (len(result1) > 1):
-                        #     fd.write(tabulate(result1, headers="firstrow"))
-                        #     fd.write('\n')
-                        # else:
-                        #     fd.write('No tunnels found for node {}'.format(cntr))
-                        #     fd.write('\n')
-
-                        # fd.write(
-                        #     '\ntunnel group validation result for node {} connected to MM {} ,\n'.format(cntr, ip_address))
-                        # fd.write('+++++++++++++++++++++++++++++++++++++++++++++++++\n')
-
-                        # if (len(result2) > 1):
-                        #     fd.write(tabulate(result2, headers='firstrow'))
-                        #     fd.write('\n')
-                        # else:
-                        #     fd.write('No tunnels found for node {}'.format(cntr))
-                        #     fd.write('\n')
-
-                        # fd.close()
-
-                        # '''print results on the terminal'''
-                        # if verbose and len(result1) > 1 and len(result2) > 1:
-                        #     print('overlapping ip tunnel validation result for node {} connected to MM {},\n'
-                        #           .format(cntr, ip_address))
-                        #     print(tabulate(result1, headers='firstrow', tablefmt="fancy_grid"))
-                        #     print('\ntunnel group validation result for node {} connected to MM {} ,\n'.format(cntr,
-                        #                                                                                        ip_address))
-                        #     print(tabulate(result2, headers='firstrow', tablefmt="fancy_grid"))
-
-            # if model_type == 'MD':
-            #     ## check tunnel status
-            #     print('validating tunnel status on MD {}\n'.format(ip_address))
-            #     cmd = 'show ip interface brief'
-                # con.execute_command(cmd)
-
-                # '''parse tunnel UP / down status from each of the MD'''
-                # intf_state = con.ps.parse_show_ip_interface(ip_address)
-
-                # ''' validate if tunnel status is UP or DOWN'''
-                # result3 = validate_tunnel_status(intf_state)
-                # fd = open(outfile, "a")
-                # '''write to file the results'''
-                # fd.write('\ntunnel status validation result for MD node {},\n'.format(ip_address))
-                # fd.write('+++++++++++++++++++++++++++++++++++++++++++++++++\n')
-                # if len(result3) == 1:
-                #     log.critical('NO Tunnels Found for MD node {}'.format(ip_address))
-                #     fd.write('No Tunnels found for node {}\n'.format(ip_address))
-                #     if verbose:
-                #         print('No Tunnels found for node {}.\n'.format(ip_address))
-                # else:
-                #     ''' write results to the result file'''
-                #     fd.write(tabulate(result3, headers="firstrow"))
-                #     final_result.append(result3)
-                #     fd.write('\n')
-                #     '''print results on the terminal'''
-                #     if verbose:
-                #         print('\ntunnel status validation result for MD node {},\n'.format(ip_address))
-                #         print(tabulate(result3, headers="firstrow", tablefmt="fancy_grid"))
-                # fd.close()
-            # con.handle.close()
-
-
+                    else:
+                        log.error(f"[{dev}] error: ({res.status_code}) {res.error}", show=True)
+                    
+                    # Done with API calls close session with Controller
+                    con.handle.close()
 
 
 if __name__ == "__main__":

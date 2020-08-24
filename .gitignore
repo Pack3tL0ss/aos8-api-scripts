@@ -1,6 +1,7 @@
 .vscode/
 dev/
-config.json
+config.yaml
+results.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

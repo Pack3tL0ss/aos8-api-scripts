@@ -1,0 +1,7 @@
+---
+  conductors:  # Mobility Conductor (formerly Mobility Master)
+    # if or fqdn of Mobility Masters
+    - mm.yourdomain.com
+    - 10.0.30.104
+  user: admin
+  pass: aruba123
