@@ -1,0 +1,6 @@
+certifi
+idna
+mccabe
+PyYAML
+requests
+urllib3
