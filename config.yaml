@@ -1,5 +1,0 @@
----
-  conductors:  # Mobility Conductor (formerly Mobility Master)
-    - mm.kabrew.com
-  user: wade
-  pass: hpIMC!!!
