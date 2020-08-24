@@ -157,7 +157,7 @@ class Controllers():
 
         for idx, thread in enumerate(t):
             thread.join()
-            log.info(f"Thread with ip - {thread_array[idx][0]} completed", show=True)
+            # log.info(f"Thread for {thread_array[idx][0]} completed")
 
     def get_session(self, dev, username, password):
         try:
@@ -165,21 +165,22 @@ class Controllers():
             con = AosConnect(ip, user=username, password=password)
             r = con.api_login()
             if r.ok:
+                log.info(f"{ip}: Session Estabished", show=True)
                 if ip not in self.data:
                     self.data[ip] = ManagedDevice(connection=con)
                 else:
                     setattr(self.data[ip], 'connection', con)
             else:
-                log.error(r.err)
-                raise r.error.__name__
+                log.error(f"{dev}: Failure Establishing Session: {r.error}", show=True)
+                # raise r.error.__name__
         except socket.gaierror:
-            log.critical(f"[{dev}] Unable to resolve host.")
+            log.critical(f"{dev}: Unable to resolve host.")
         except ConnectionRefusedError as e:
-            log.critical(f"[{dev}] Unable to connect to Controller. Login Failed.\n{e}")
+            log.critical(f"{dev}: Unable to connect to Controller. Login Failed.\n{e}")
         except requests.RequestException as e:
-            log.critical(f"[{dev}] Requests Exception {e}")
+            log.critical(f"{dev}: Requests Exception {e}")
         except Exception as e:
-            log.critical(f"[{dev}] Exception Occured {e}")
+            log.critical(f"{dev}: Exception Occured {e}")
 
     def exec_api(self, conductor=True):
         """
@@ -205,11 +206,12 @@ class Controllers():
                             res = con.execute_command("show vrrp")
                             if res.json.get('_data'):
                                 if dev in '\n'.join(res.json['_data']):
-                                    log.info(f'Removing MM VRRP addrress {dev} from data - data will include physical addresses')
+                                    log.info(f'{dev}: Removing MM VRRP addrress from data - data will include physical addresses')
                                     con.handle.close()
+                                    log.info(f"{dev}: Session Closed", show=True)
                                     del self.data[dev]
                         except Exception as e:
-                            log.error(f"[{dev}] Exception occured 'show vrrp' {e}")
+                            log.error(f"{dev}: Exception occured 'show vrrp' {e}")
         else:
             for dev in self.data:
                 if hasattr(self.data[dev], "connection"):
@@ -220,13 +222,14 @@ class Controllers():
                         for k, v in img_dict.items():
                             setattr(self.data[dev], k, v)
                     else:
-                        log.error(f"[{dev}] error: ({res.status_code}) {res.error}", show=True)
+                        log.error(f"{dev}: error: ({res.status_code}) {res.error}", show=True)
 
+                    # Done with API calls close session with Controller
                     try:
-                        # Done with API calls close session with Controller
                         con.handle.close()
+                        log.info(f"{dev}: Session Closed", show=True)
                     except Exception as e:
-                        log.error(f"[{dev}] Error on session close {e}")
+                        log.error(f"{dev}: Error on session close {e}")
 
 
 if __name__ == "__main__":
