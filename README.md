@@ -47,7 +47,7 @@ Requires Python3.x which can be installed from the Microsoft Store
 ```cmd
 python3 -m pip install virtualenv
 python3 -m virtualenv venv
-venv/Scripts/activate
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -63,7 +63,7 @@ venv/bin/python3 image_versions.py
 ### Windows
 
 ```cmd
-venv/Scripts/activate
+venv\Scripts\activate
 python3 image_versions.py
 ```
 
