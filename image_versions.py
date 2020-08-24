@@ -221,9 +221,12 @@ class Controllers():
                             setattr(self.data[dev], k, v)
                     else:
                         log.error(f"[{dev}] error: ({res.status_code}) {res.error}", show=True)
-                    
-                    # Done with API calls close session with Controller
-                    con.handle.close()
+
+                    try:
+                        # Done with API calls close session with Controller
+                        con.handle.close()
+                    except Exception as e:
+                        log.error(f"[{dev}] Error on session close {e}")
 
 
 if __name__ == "__main__":
