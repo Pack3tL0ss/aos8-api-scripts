@@ -6,7 +6,7 @@ API Scripts for ArubaOS 8 Controller API
 
 Requires Python3, tested on Linux (tested specifically on wsl:ubuntu20.04, Linux Mint20, Windows 10)
 
-- clone this repo to your system locally `git clone https://github.cm/Pack3tL0ss/aos8-api-scripts.git`
+- clone this repo to your system locally `git clone https://github.com/Pack3tL0ss/aos8-api-scripts.git`
 - cd to aos8-api-scripts directory `cd aos8-api-scripts`
 
 ## Setting up the environment
@@ -35,7 +35,7 @@ cp config.yaml.example config.yaml
 nano config.yaml
 ```
 
-Then edit as required.  
+Then edit as required.
 > The only IP/fqdns required are the Mobility Conductors, A complete list of Managed Devices is retrieved from the Conductors.
 
 ### Windows:
