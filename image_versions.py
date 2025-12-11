@@ -1,44 +1,27 @@
 #!/etc/ConsolePi/venv/bin python3
 #
 # Author: Wade Wells github/Pack3tL0ss
+#
+# Version 2020-1.1
+#
 # portions of this script based on the work already done by https://github.com/aruba/arubaos8-example-scripts
 
 
-import threading
-# import datetime
-import requests
-import argparse
 import socket
-# import log
-# import yaml
-# from tabulate import tabulate
-# import argparse
-import os
+import threading
 import time
-from common import utils
-from common import parse
-from common import MyLogger
-from common import AosConnect
 
-path = os.path
+import requests
+
+from common import AosConnect, config, log, parse
+
 LOCK = threading.Lock()
 COUNT = 3
 controllers = ''
 port = ''
-# localtime = datetime.datetime.now().strftime("%m%d%Y_%H%M%S")
 outfile = 'results.csv'
 outfile2 = 'results.txt'
-log_file = 'image_versions.log'
-yaml_config = 'config.yaml'
-DEBUG = os.environ.get('DEBUG', False)
-
-
-# setting the log level
-log = MyLogger(log_file, debug=DEBUG)
-log.info(f" {'-' * 10 } Script Startup {'-' * 20 }")
-
-# -- // Get Config from config.yaml \\ --
-config = utils.get_yaml_file(yaml_config)
+config = config.config
 
 
 class ManagedDevice:
@@ -89,8 +72,10 @@ class Controllers():
         self.run()
 
     def run(self):
-        # Start parallel threads to establish session with Mobility Conductors
-        # updates data attribute
+        ''' Start parallel threads to establish session with Mobility Conductors
+
+        updates data attribute
+        '''
         self.start_controller_threads(self.conductors)
         start = len(self.data)
         if self.data:
@@ -155,9 +140,8 @@ class Controllers():
 
             time.sleep(0.5)
 
-        for idx, thread in enumerate(t):
+        for thread in t:
             thread.join()
-            # log.info(f"Thread for {thread_array[idx][0]} completed")
 
     def get_session(self, dev, username, password):
         try:
@@ -183,13 +167,6 @@ class Controllers():
             log.critical(f"{dev}: Exception Occured {e}")
 
     def exec_api(self, conductor=True):
-        """
-        This function will login into the controller via API and execute all the commands sequentially for all the IPs.
-        :param ip_address: IP address of the controller
-        :param username: Username of the controller
-        :param password: password of the controller
-        :param model_type: if the controller is MM/MD
-        """
         if conductor:
             ''' get all the MDs connect to the Mobility Conductor'''
             for dev in self.data.copy():
@@ -233,27 +210,7 @@ class Controllers():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser('Run Tunnel Validation  tool.\n'
-                                     'Example: mainFile.py  --controller controllers.txt --port 4343 --verbose\n')
-
-    parser.add_argument('--controllers', help='list of controllers and username/password, \n'
-                                              'Default file is included with distribution, \n'
-                                              'Example - 10.1.1.1,viewonly,viewonly,MD')
-    parser.add_argument('--port', default=4343, help='provide custom REST API https port, default port used is 4343')
-    parser.add_argument('--verbose', dest='verbose', action='store_true', help='set this option to print results on '
-                                                                               'terminal\n')
-    parser.set_defaults(verbose=False)
-
-    args = parser.parse_args()
-    if args.controllers is None:
-        pass
-
-    else:
-        controllers = args.controllers
-
-    port = args.port
-    verbose = args.verbose
-
+    log.info(f" {'-' * 10 } Script Startup {'-' * 20 }")
     mcds = config.get('conductors', [])
     if mcds:
         Controllers(mcds)

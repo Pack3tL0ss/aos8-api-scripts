@@ -2,6 +2,7 @@
 dev/
 config.yaml
 results.*
+dev/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -117,6 +118,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+venv*/
 
 # Spyder project settings
 .spyderproject
@@ -141,3 +143,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# ignore aoscli folder for now
+/aoscli

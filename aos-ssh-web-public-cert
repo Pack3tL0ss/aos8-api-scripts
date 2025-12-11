@@ -1,0 +1,20 @@
+(VPNC1) #disaster-recovery on
+
+*******************************
+Entering disaster recovery mode
+*******************************
+
+(DR-Mode) [mm] #crypto pki-import pem PublicCert wade-user-kabrewca wade-dc1ca-user.pem
+
+Certificate is uploaded. Please execute "crypto-local pki PUBLICCERT wade-user-kabrewca wade-dc1ca-user.pem" from a config node
+
+(DR-Mode) [mynode] (config) #crypto-local pki publicCert wade-user-kabrewca wade-dc1ca-user.pem
+(DR-Mode) ^[mynode] (config) #mgmt-user ssh-pubkey client-cert wade-user-kabrewca wade root
+(DR-Mode) ^[mynode] (config) #write mem
+
+Saving Configuration...
+
+Configuration Saved.
+(DR-Mode) [mynode] (config) #end
+(DR-Mode) [mynode] #disaster-recovery off
+(VPNC1) #

@@ -1,14 +1,15 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import logging
+from typing import Union
 import urllib3
 import requests
-
+from .config import Config
+from sys import argv
+# from pathlib import Path
+from pathlib import PurePath
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# PROMPT = re.compile(r"([a-zA-Z0-9\-.\s]*#)")
 
 headers = {
     "Content-Type": "application/json",
@@ -17,21 +18,24 @@ headers = {
 
 
 class Response():
-    def __init__(self, ok: bool, output=None, error=None, status_code=None, state=None, do_json=False,  **kwargs):
+    def __init__(self, ok: bool, output=None, error=None, status_code=None, state=None, **kwargs):
         self.ok = ok
         self.text = output
         self.error = error
         self.state = state
         self.status_code = status_code
         if 'json' in kwargs:
-            self.json = kwargs['json']
+            self._json = kwargs['json']
         else:
-            self.json = None
+            self._json = {}
+
+    def json(self):
+        return self._json
 
 
 class AosConnect(Response):
 
-    def __init__(self, ip, user='', password='', port=4343):
+    def __init__(self, ip: str, user: str = '', password: str = '', port: int = 4343):
         self.ip = ip
         self.port = port
         self.user = user
@@ -72,7 +76,6 @@ class AosConnect(Response):
                              params=parameters, cookies=self.handle.cookies
                              )
             if r.ok:
-                # self.handle = r
                 return Response(ok=True, output=r.text, status_code=r.status_code, json=r.json())
             else:
                 return Response(ok=False, error=r.reason, status_code=r.status_code)
@@ -81,13 +84,17 @@ class AosConnect(Response):
 
 
 class MyLogger:
-    def __init__(self, log_file, debug=False):
+    def __init__(self, log_file: Union[str, PurePath], debug: bool = False, show: bool = False):
         self.log_msgs = []
         self.DEBUG = debug
         self.verbose = False
-        self.log_file = log_file
+        if isinstance(log_file, PurePath):
+            self.log_file = log_file
+        else:
+            self.log_file = PurePath(log_file)
         self._log = self.get_logger()
         self.name = self._log.name
+        self.show = show  # Sets default log behavior (other than debug)
 
     def get_logger(self):
         '''Return custom log object.'''
@@ -97,65 +104,67 @@ class MyLogger:
                             level=logging.DEBUG if self.DEBUG else logging.INFO,
                             format=fmtStr,
                             datefmt=dateStr)
-        return logging.getLogger(__name__)
+        return logging.getLogger(self.log_file.stem)
 
     def log_print(self, msgs, log=False, show=True, level='info', *args, **kwargs):
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         _msgs = []
         _logged = []
         for i in msgs:
+            i = str(i)
             if log and i not in _logged:
                 getattr(self._log, level)(i)
                 _logged.append(i)
-            if '\n' in i:
-                _msgs += i.replace('\t', '').replace('\r', '').split('\n')
-            elif i.startswith('[') and ']' in i:
-                _msgs.append(i.split(']', 1)[1].replace('\t', '').replace('\r', ''))
-            else:
-                _msgs.append(i.replace('\t', '').replace('\r', '').strip())
-
-        msgs = []
-        [msgs.append(i) for i in _msgs
-            if i and i not in msgs and i not in self.log_msgs]
+                if i and i not in self.log_msgs:
+                    _msgs.append(i)
 
         if show:
-            self.log_msgs += msgs
+            self.log_msgs += _msgs
             for m in self.log_msgs:
                 print(m)
             self.log_msgs = []
 
-    def show(self, msgs, log=False, show=True, *args, **kwargs):
+    def show(self, msgs: Union[list, str], log: bool = False, show: bool = True, *args, **kwargs) -> None:
         self.log_print(msgs, show=show, log=log, *args, **kwargs)
 
-    def debug(self, msgs, log=True, show=False, *args, **kwargs):
+    def debug(self, msgs: Union[list, str], log: bool = True, show: bool = False, *args, **kwargs) -> None:
         self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
     # -- more verbose debugging - primarily to get json dumps
-    def debugv(self, msgs, log=True, show=False, *args, **kwargs):
+    def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = False, *args, **kwargs) -> None:
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
 
-    def info(self, msgs, log=True, show=False, *args, **kwargs):
+    def info(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, *args, **kwargs)
 
-    def warning(self, msgs, log=True, show=False, *args, **kwargs):
+    def warning(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='warning', *args, **kwargs)
 
-    def error(self, msgs, log=True, show=False, *args, **kwargs):
+    def error(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='error', *args, **kwargs)
 
-    def exception(self, msgs, log=True, show=False, *args, **kwargs):
+    def exception(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='exception', *args, **kwargs)
 
-    def critical(self, msgs, log=True, show=False, *args, **kwargs):
+    def critical(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='critical', *args, **kwargs)
 
-    def fatal(self, msgs, log=True, show=False, *args, **kwargs):
+    def fatal(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+        show = show or self.show
         self.log_print(msgs, log=log, show=show, level='fatal', *args, **kwargs)
 
     def setLevel(self, level):
         getattr(self._log, 'setLevel')(level)
 
 
-# DEBUG = os.getenv('DEBUG', False)
-# log = MyLogger(os.path.join(os.path.abspath(".."), 'logs', f"{__name__}.log"), debug=DEBUG)
+_calling_script = PurePath(argv[0])
+log_file = PurePath.joinpath(_calling_script.parent, "logs", f"{_calling_script.stem}.log")
+
+config = Config()
+log = MyLogger(log_file, debug=config.DEBUG, show=True)

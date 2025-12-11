@@ -1,0 +1,15 @@
+# certifi
+# idna
+# mccabe
+urllib3
+requests
+rich
+aiohttp
+netmiko
+PyYAML
+pydantic
+paramiko
+cryptography
+# aoscli
+typer
+tablib

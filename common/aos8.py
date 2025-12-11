@@ -1,0 +1,100 @@
+'''
+Copyright 2019 Lim Wei Chiang
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+'''
+try:
+    import paramiko
+except ImportError:
+    print("Error importing Paramiko module, please install it with \"pip install paramiko\". Quitting...")
+    exit(-1)
+
+import time
+import re
+import socket
+
+
+# Check if string contains AOS 8 prompt -> Implies target is ready to accept next command, or end of output.
+def is_contain_prompt(input_str: str = "") -> bool:
+    input_str = input_str.replace('\r', '')
+
+    if re.search('^\([a-zA-Z0-9\-\_]*\) [\^\*]{0,2}\[[a-zA-Z0-9\-\_]*\] [\^\*]{0,2}\(?[a-zA-Z0-9\-\_]*\)?\s?#', input_str, re.MULTILINE):
+        return True
+    elif re.search('^\([a-zA-Z0-9\-\_]*\) [\^\*]{0,2}\s?#', input_str, re.MULTILINE):
+        return True
+    else:
+        return False
+
+
+# Remove the executed command and CLI prompt from output
+def clean_output(output: str, command: str = ""):
+    output = output.replace('\r', '')
+    lines = output.splitlines(True)
+    clean_output = []
+
+    for line in lines:
+        if is_contain_prompt(line):
+            pass
+        elif command != "" and re.search(command, line, re.MULTILINE):
+            pass
+        else:
+            clean_output.append(line.rstrip())
+
+    return "\n".join(clean_output)
+
+
+class AOS8SSHClient(paramiko.SSHClient):
+    def __init__(self):
+        super().__init__()
+        self.shell = None
+
+    def aos8connect(self, host, username, password, secure_login=True):
+        self.load_system_host_keys()
+
+        if secure_login is False:
+            self.set_missing_host_key_policy(paramiko.client.AutoAddPolicy)
+
+        self.connect(host, username=username, password=password)
+
+    def aos8invoke_shell(self):
+        self.shell = self.invoke_shell()
+        self.aos8execute("no paging")
+
+    def aos8close(self):
+        if self.shell is not None:
+            self.shell.close()
+            self.shell = None
+        self.close()
+
+    def aos8execute(self, command):
+        if self.shell is not None:
+            self.shell.sendall(command + "\n")  # TODO Add except handling; otherwise current uncaught exception
+            time.sleep(0.5)  # allow target to react
+
+            data = ""
+            buffer = ""
+
+            while True:
+                try:
+                    buffer = self.shell.recv(65535)
+                except socket.timeout:
+                    break
+
+                data += buffer.decode()
+
+                # Check for CLI prompt; means command is completed so we don't have to wait for a timeout.
+                if is_contain_prompt(data):
+                    break
+
+            # Cleanup before returning data.
+            return clean_output(data, command)

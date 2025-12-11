@@ -1,5 +1,10 @@
 
 
+from datetime import datetime, timezone
+from . import Response
+from . import log
+
+
 def show_switches(data: dict):
     """
     Parses show switches output
@@ -34,3 +39,64 @@ def show_image_version(data):
             img_dict[f"version {_part}"] += f"_{line.split(':')[-1].strip()}"
 
     return img_dict
+
+
+def show_web_server_profile(data: Response) -> dict:
+    """Get Portal Certificate Name from output of show web-server profile
+
+    Args:
+        data (dict): Output of "show web-server profile" on Aruba Controller
+
+    Returns:
+        dict: Clean Return data from output of command
+    """
+    data = data.json()
+    key = data.get("Web Server Configuration", list(data.keys())[0])
+    if "Error" in key:
+        try:
+            log.error(key.split("(")[1].split(")")[0])
+        except Exception:
+            log.error(key)
+
+    data = data.get(key)
+    # cert_name = [z for y in data for z in y.values() if "Captive Portal Certificate" in y.values()][-1]
+
+    _ret = {_dict.get("Parameter", "error"): _dict.get("Value", "error") for _dict in data}
+    if "error" in _ret:
+        log.error("Error During Parsing of show web-server profile output")
+        return {}
+    else:
+        return _ret
+
+
+def show_crypto_pki_servercert(data: Response) -> dict:
+    this = iter(data.json().get("_data"))
+    _ret = {}
+    for line in this:
+        if line.startswith("Not After :"):
+            expire_date = line.replace("Not After : ", "")
+            expire_date = expire_date.split()
+            if expire_date:
+                expire_date[1] = f"{int(expire_date[1]):02}"
+                expire_date = " ".join(expire_date)
+                naive = datetime.strptime(expire_date, '%b %d %H:%M:%S %Y %Z')
+                aware = datetime(naive.year, naive.month, naive.day, naive.hour, naive.minute, naive.second, tzinfo=timezone.utc)
+                _ret["cert_exp_date"] = aware
+
+        elif line.startswith("Subject: CN="):
+            _ret["cert_cn"] = line.split("Subject: CN=")[-1]
+
+        elif "CA Issuers - URI:" in line:
+            _ret["cert_ca_issuers_uri"] = line.replace("CA Issuers - URI:", "")
+
+        elif "Subject Alternative Name:" in line:
+            try:
+                san_line = next(this)
+                san_line = san_line.split(",")
+                san = {"dns": [], "ip": []}
+                _ = [san[y.split(":")[0].strip().lower()].append(y.split(":")[1]) for y in san_line]
+                _ret["cert_san"] = san
+            except Exception as e:
+                log.warning(f"Unable to Parse SAN from show crypto pki ServerCert output\n{e}")
+
+    return _ret

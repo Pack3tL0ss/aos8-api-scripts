@@ -1,7 +1,14 @@
 ---
-  conductors:  # Mobility Conductor (formerly Mobility Master)
-    # if or fqdn of Mobility Masters
-    - mm.yourdomain.com
-    - 10.0.30.104
-  user: admin
-  pass: aruba123
+conductors:  # Mobility Conductor (formerly Mobility Master)
+  # ip or fqdn of Mobility Masters
+  - mm.yourdomain.com
+  - 10.0.30.104
+user: admin
+pass: aruba123
+# certificat sync
+tftp_server: 10.0.30.31
+portal_cert_p12: securelogin.kabrew.com.pfx
+portal_cert_passphrase: aruba123
+cert_dir: "/home/wade/git/aos8-api-scripts/dev"
+debug: false
+

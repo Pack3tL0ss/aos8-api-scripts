@@ -1,0 +1,10 @@
+ap redeploy controller-less ap-name 345-ZsRm
+
+Disable DHCP Policy pointing to AOS8 Controllers
+Enable DHCP Policy pointing to AOS10 Cluster VIP
+ap redeploy controller-less all global  << From MM
+
+convert back to aos 8 
+SSH admin@<ip> to each AP
+convert-aos-ap CAP 10.0.30.120
+    ap will eventually reboot
